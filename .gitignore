@@ -1,0 +1,50 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environment
+venv/
+env/
+.venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Data files
+data/*.csv
+data/*.txt
+*.csv
+
+# Environment variables
+.env
+.env.local
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Distribution
+dist/
+build/
+*.egg-info/
+
+# Test
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Credentials (IMPORTANT: never commit)
+*password*
+*secret*
+*credentials*
