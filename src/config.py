@@ -67,7 +67,7 @@ MQTT_TOPICS = {
 }
 
 # Dashboard Configuration
-DASHBOARD_HOST = "127.0.0.1"
+DASHBOARD_HOST = "0.0.0.0"  # Accessible on local network
 DASHBOARD_PORT = 8050
-DASHBOARD_DEBUG = True
+DASHBOARD_DEBUG = False  # Disable debug in network mode
 UPDATE_INTERVAL_MS = 2000  # Refresh interval in milliseconds
