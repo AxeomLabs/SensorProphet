@@ -30,6 +30,7 @@ class AlertType(Enum):
     THRESHOLD = "threshold"
     PREDICTION = "prediction"
     MAINTENANCE = "maintenance"
+    EARLY_WARNING = "early_warning"
 
 
 @dataclass
@@ -280,6 +281,61 @@ class AlertEngine:
             )
         
         return None
+    
+    def check_early_warning(
+        self,
+        equipment_id: str,
+        predicted_hours: float,
+        confidence: float,
+        affected_metrics: List[str],
+        risk_score: float,
+    ) -> Optional[Alert]:
+        """
+        Generate alert for early warning prediction.
+        
+        Args:
+            equipment_id: Equipment identifier.
+            predicted_hours: Hours until predicted anomaly.
+            confidence: Prediction confidence (0-1).
+            affected_metrics: List of affected metric names.
+            risk_score: Overall risk score (0-100).
+            
+        Returns:
+            Alert if warning should be issued, None otherwise.
+        """
+        if predicted_hours is None or confidence < 0.5:
+            return None
+        
+        # Determine severity based on time horizon
+        if predicted_hours <= 6:
+            severity = AlertSeverity.CRITICAL
+            message = f"EARLY WARNING: Anomaly predicted in {predicted_hours:.1f} hours"
+        elif predicted_hours <= 24:
+            severity = AlertSeverity.WARNING
+            message = f"Early Warning: Anomaly predicted in {predicted_hours:.1f} hours"
+        elif predicted_hours <= 48:
+            severity = AlertSeverity.INFO
+            message = f"Advisory: Potential anomaly in {predicted_hours:.1f} hours"
+        else:
+            return None  # Too far ahead to alert
+        
+        metrics_str = ", ".join(affected_metrics[:3])
+        message += f" (Affected: {metrics_str}, Confidence: {confidence:.0%})"
+        
+        return self._create_alert(
+            equipment_id=equipment_id,
+            alert_type=AlertType.EARLY_WARNING,
+            severity=severity,
+            message=message,
+            source_value=predicted_hours,
+            threshold=confidence,
+            metadata={
+                "predicted_hours": predicted_hours,
+                "confidence": confidence,
+                "affected_metrics": affected_metrics,
+                "risk_score": risk_score,
+            },
+        )
     
     def _create_alert(
         self,

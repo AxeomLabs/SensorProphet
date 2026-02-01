@@ -48,3 +48,15 @@ htmlcov/
 *password*
 *secret*
 *credentials*
+
+# Generated reports and helper scripts
+*.pdf
+*.docx
+generate_pdf.py
+generate_docx.py
+QBIT_2026_Team_Report.md
+
+# Saved models
+models/*.pkl
+models/*.h5
+models/*.joblib

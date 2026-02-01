@@ -45,6 +45,11 @@ LSTM_SEQUENCE_LENGTH = 50
 LSTM_EPOCHS = 50
 LSTM_BATCH_SIZE = 32
 
+# Early Warning Configuration
+EARLY_WARNING_HORIZONS = [2, 6, 12, 24, 48]  # Hours to predict ahead
+EARLY_WARNING_CONFIDENCE_THRESHOLD = 0.7  # Minimum confidence to trigger warning
+EARLY_WARNING_UPDATE_INTERVAL = 10  # Update predictions every N samples
+
 # Alert Configuration
 ALERT_LEVELS = {
     "info": {"health_min": 70, "color": "#17a2b8"},

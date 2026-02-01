@@ -31,6 +31,7 @@ from src.anomaly.autoencoder import get_autoencoder_detector
 
 from src.models.forecaster import TimeSeriesForecaster
 from src.models.health_scorer import HealthScorer
+from src.models.early_warning import EarlyWarningPredictor
 
 from src.alerts.alert_engine import AlertEngine
 
@@ -70,6 +71,7 @@ class PredictiveMaintenancePipeline:
         
         self.anomaly_detector = AnomalyDetector(methods=["zscore", "isolation_forest"])
         self.health_scorer = HealthScorer()
+        self.early_warning = EarlyWarningPredictor()
         
         self.alert_engine = AlertEngine()
         
@@ -79,6 +81,7 @@ class PredictiveMaintenancePipeline:
             "alerts": [],
             "history": pd.DataFrame(),
             "features": pd.DataFrame(),
+            "early_warning": {},
         }
         
         # Pipeline state
@@ -141,6 +144,9 @@ class PredictiveMaintenancePipeline:
             # Store feature columns for later use
             self._feature_cols = numeric_cols
             
+            # Calibrate early warning predictor
+            self.early_warning.calibrate(baseline_df, numeric_cols)
+            
         elif self.use_real_data and self.data_loader:
             # Use early portion of data as baseline
             baseline_df = self.data_loader.load_all(end_idx=100)
@@ -155,6 +161,9 @@ class PredictiveMaintenancePipeline:
             self.health_scorer.calibrate(baseline_df, numeric_cols)
             
             self._feature_cols = numeric_cols
+            
+            # Calibrate early warning predictor
+            self.early_warning.calibrate(baseline_df, numeric_cols)
         else:
             # Generate synthetic baseline data matching simulator output
             baseline_data = pd.DataFrame({
@@ -165,6 +174,7 @@ class PredictiveMaintenancePipeline:
             
             self.anomaly_detector.fit(baseline_data)
             self.health_scorer.calibrate(baseline_data)
+            self.early_warning.calibrate(baseline_data)
             self._feature_cols = list(baseline_data.columns)
         
         logger.info("Model training complete")
@@ -223,6 +233,21 @@ class PredictiveMaintenancePipeline:
             self.alert_engine.check_anomaly(equipment_id, is_anomaly, anomaly_score)
         self.alert_engine.check_thresholds(equipment_id, features)
         
+        # Early warning prediction
+        early_warning_result = self.early_warning.predict(features)
+        if early_warning_result.has_warning:
+            for pred in early_warning_result.predictions:
+                self.alert_engine.check_early_warning(
+                    equipment_id=equipment_id,
+                    predicted_hours=pred.predicted_time_hours,
+                    confidence=pred.confidence,
+                    affected_metrics=pred.affected_metrics,
+                    risk_score=early_warning_result.overall_risk_score,
+                )
+        
+        # Store early warning data
+        self.data_store["early_warning"][equipment_id] = early_warning_result.to_dict()
+        
         # Update data store
         self.data_store["equipment"][equipment_id] = {
             "health_score": health_score,
@@ -231,6 +256,7 @@ class PredictiveMaintenancePipeline:
             "anomaly_score": anomaly_score,
             "last_update": timestamp,
             "features": features,
+            "early_warning": early_warning_result.to_dict() if early_warning_result else None,
         }
         
         return {
@@ -241,6 +267,7 @@ class PredictiveMaintenancePipeline:
             "is_anomaly": is_anomaly,
             "anomaly_score": anomaly_score,
             "features": features,
+            "early_warning": early_warning_result.to_dict() if early_warning_result else None,
         }
     
     def run_batch_analysis(self, start_idx: int = 0, end_idx: Optional[int] = None) -> pd.DataFrame:

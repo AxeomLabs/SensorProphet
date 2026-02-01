@@ -168,16 +168,27 @@ def create_layout() -> html.Div:
                     html.Div(id="stats-panel", style={"padding": "10px"}),
                 ], className="card", style={"marginBottom": "10px"}),
                 
-                # Alerts
+                # Early Warning
                 html.Div([
                     html.Div([
-                        html.Span("ALERTS"),
+                        html.Span("⚠ EARLY WARNING"),
+                        html.Span(id="early-warning-badge", className="mono", 
+                                  style={"marginLeft": "8px", "background": T["warning"], "padding": "2px 8px", 
+                                         "borderRadius": "10px", "fontSize": "9px", "fontWeight": "600"}),
+                    ], className="card-header", style={"background": T["warning"] + "20"}),
+                    html.Div(id="early-warning-panel", style={"padding": "8px"}),
+                ], id="early-warning-card", className="card", style={"marginBottom": "10px", "border": f"2px solid {T['warning']}"}),
+                
+                # Alerts - Enhanced visibility
+                html.Div([
+                    html.Div([
+                        html.Span("🚨 ALERTS"),
                         html.Span(id="alert-count", className="mono", 
-                                  style={"marginLeft": "8px", "background": T["danger"], "padding": "2px 6px", 
-                                         "borderRadius": "10px", "fontSize": "9px"}),
-                    ], className="card-header"),
-                    html.Div(id="alerts-panel", style={"padding": "6px", "maxHeight": "100px", "overflowY": "auto"}),
-                ], className="card"),
+                                  style={"marginLeft": "8px", "background": T["danger"], "padding": "3px 10px", 
+                                         "borderRadius": "12px", "fontSize": "11px", "fontWeight": "700"}),
+                    ], className="card-header", style={"background": T["danger"] + "30", "padding": "10px 12px"}),
+                    html.Div(id="alerts-panel", style={"padding": "8px", "maxHeight": "150px", "overflowY": "auto"}),
+                ], id="alerts-card", className="card", style={"border": f"2px solid {T['danger']}"}),
             ], style={"width": "220px", "padding": "10px", "flexShrink": "0", "overflowY": "auto"}),
             
             # Main Panel
@@ -348,7 +359,8 @@ def register_callbacks(app: dash.Dash):
             Output("health-display", "children"), Output("val-rms", "children"), Output("val-kurtosis", "children"),
             Output("val-mean", "children"), Output("val-zscore", "children"), Output("val-baseline", "children"),
             Output("val-std", "children"), Output("stats-panel", "children"), Output("alerts-panel", "children"),
-            Output("alert-count", "children"), Output("gauge-chart", "figure"), Output("trends-chart", "figure"),
+            Output("alert-count", "children"), Output("early-warning-panel", "children"), Output("early-warning-badge", "children"),
+            Output("gauge-chart", "figure"), Output("trends-chart", "figure"),
             Output("anomaly-chart", "figure"), Output("prediction-chart", "figure"), Output("distribution-chart", "figure"),
         ],
         Input("tick", "n_intervals"),
@@ -359,10 +371,11 @@ def register_callbacks(app: dash.Dash):
         
         if csv is None:
             empty = empty_fig()
+            ew_panel = html.Div("No data", style={"color": T["dim"], "textAlign": "center", "fontSize": "10px"})
             return (time_str, "IDLE", dot_style(T["muted"]), "0", "0", None,
                     status_el("NO DATA", T["dim"]), prob_el(0), rul_el("--"), health_el(0),
                     "--", "--", "--", "--", "--", "--", stats_empty(), alerts_empty(), "0",
-                    empty, empty, empty, empty, empty)
+                    ew_panel, "--", empty, empty, empty, empty, empty)
         
         if STATE["paused"]:
             idx = STATE["idx"]
@@ -443,16 +456,46 @@ def register_callbacks(app: dash.Dash):
             stat_row("Max Z-Score", f"{max(STATE['history']['zscore']) if STATE['history']['zscore'] else 0:.2f}", T["warning"]),
         ])
         
-        # Alerts panel
+        # Alerts panel - Enhanced visibility
         alerts_els = []
         for a in STATE["alerts"][:10]:
             c = T["danger"] if a["sev"] == "critical" else T["warning"]
+            icon = "🔴" if a["sev"] == "critical" else "🟠"
             alerts_els.append(html.Div([
-                html.Span("●", style={"color": c, "marginRight": "6px", "fontSize": "8px"}),
-                html.Span(a["msg"], style={"fontSize": "9px"})
-            ], style={"padding": "3px 0", "borderBottom": f"1px solid {T['border']}"}))
+                html.Span(icon, style={"marginRight": "8px", "fontSize": "12px"}),
+                html.Span(a["msg"], style={"fontSize": "11px", "fontWeight": "500", "color": c})
+            ], style={"padding": "6px 4px", "borderBottom": f"1px solid {T['border']}", "background": c + "15"}))
         if not alerts_els:
-            alerts_els = html.Div("No alerts", style={"color": T["dim"], "textAlign": "center", "padding": "10px"})
+            alerts_els = html.Div("✓ No alerts", style={"color": T["success"], "textAlign": "center", "padding": "15px", "fontSize": "12px"})
+        
+        # Early warning panel
+        # Simulate early warning based on current trend
+        ew_hours = None
+        ew_confidence = 0
+        if len(STATE["history"]["zscore"]) > 10:
+            recent_zscores = STATE["history"]["zscore"][-10:]
+            trend = (recent_zscores[-1] - recent_zscores[0]) / 10 if len(recent_zscores) > 1 else 0
+            if trend > 0.05:  # Degrading trend
+                ew_hours = max(2, min(48, int((STATE["threshold"] - z_score) / (trend + 0.01))))
+                ew_confidence = min(95, int(50 + trend * 200))
+        
+        if ew_hours and ew_hours <= 48:
+            severity_color = T["danger"] if ew_hours <= 6 else T["warning"] if ew_hours <= 24 else T["info"]
+            ew_panel = html.Div([
+                html.Div([
+                    html.Span("⚠", style={"fontSize": "20px", "marginRight": "8px"}),
+                    html.Span(f"~{ew_hours}h", className="mono", style={"fontSize": "20px", "fontWeight": "700", "color": severity_color}),
+                ], style={"textAlign": "center", "marginBottom": "6px"}),
+                html.Div(f"Confidence: {ew_confidence}%", style={"fontSize": "10px", "color": T["dim"], "textAlign": "center"}),
+                html.Div("Degradation detected", style={"fontSize": "9px", "color": severity_color, "textAlign": "center", "marginTop": "4px"}),
+            ])
+            ew_badge = f"~{ew_hours}h"
+        else:
+            ew_panel = html.Div([
+                html.Div("✓", style={"fontSize": "18px", "color": T["success"], "textAlign": "center"}),
+                html.Div("No imminent issues", style={"fontSize": "10px", "color": T["dim"], "textAlign": "center"}),
+            ])
+            ew_badge = "OK"
         
         # Charts
         gauge = gauge_chart(health)
@@ -466,7 +509,7 @@ def register_callbacks(app: dash.Dash):
             anom_el, prob_el(fail_prob), rul_el(rul), health_el(health),
             f"{rms:.5f}", f"{kurtosis:.4f}", f"{mean:.6f}", f"{z_score:.2f}",
             f"{bl_mean:.5f}", f"{bl_std:.5f}", stats_panel, alerts_els, str(len(STATE["alerts"])),
-            gauge, trends, anom_chart, pred, dist
+            ew_panel, ew_badge, gauge, trends, anom_chart, pred, dist
         )
 
 
